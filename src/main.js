@@ -10,6 +10,7 @@ import { pickArchive, takeProductPhoto, base64ToBytes, saveAndShare, shareExisti
 import { buildCatalogImportPlan, buildSingleProductImportPlan, applyableRows } from './app/catalog-import.js';
 import { validateBackupPayload, normalizeBackupData, BACKUP_TABLE_COLUMNS } from './app/backup-validation.js';
 import { summarizeDayClosure } from './app/closure.js';
+import { selectInventoryRecountRows, recountResult, recountProgressLabel } from './app/inventory-count.js';
 import { strToU8, strFromU8 } from 'fflate';
 
 const root = document.querySelector('#app');
@@ -390,17 +391,26 @@ async function renderInventory() {
     }
   }
   const pendingReview = state.user.rol === 'administrador'
-    ? await query("SELECT d.*,p.nombre,c.usuario_id,c.fecha_inicio FROM conteo_detalle d JOIN productos p ON p.codigo=d.codigo JOIN conteos c ON c.id=d.conteo_id WHERE d.resultado='pendiente_verificar' ORDER BY c.fecha_inicio,p.nombre")
+    ? await query("SELECT d.*,p.nombre,c.usuario_id,c.fecha_inicio FROM conteo_detalle d JOIN productos p ON p.codigo=d.codigo JOIN conteos c ON c.id=d.conteo_id WHERE d.resultado IN ('pendiente_verificar','inconsistente') ORDER BY c.fecha_inicio,p.nombre")
     : [];
   const hideStockForCount = state.user.rol === 'dependiente' && Boolean(activeCount);
+  const hideRecountNumbers = state.user.rol === 'dependiente' && activeCount?.estado === 'reconteo';
+  const countProgress = activeCount?.estado === 'reconteo'
+    ? `${countDetails.filter(row => row.conteo_2 !== null && row.conteo_2 !== undefined).length} de ${countDetails.length} productos del reconteo registrados`
+    : `${countDetails.length} de ${products.length} productos registrados`;
+  const countTableRows = countDetails.map(row => {
+    const quantityCell = hideRecountNumbers ? '' : `<td>${row.conteo_2!==null && row.conteo_2!==undefined ? Number(row.conteo_2) : Number(row.conteo_1)}</td>`;
+    const status = hideRecountNumbers ? recountProgressLabel(row) : (row.resultado==='reconteo_pendiente'?'Pendiente de reconteo':row.resultado);
+    return `<tr><td>${esc(row.nombre)}</td><td class="code-text">${esc(row.codigo)}</td>${quantityCell}<td>${esc(status)}</td></tr>`;
+  }).join('');
   const stockRows = products.map(product => `<tr><td>${esc(product.nombre)}</td><td class="code-text">${esc(product.codigo)}</td>${hideStockForCount ? '' : `<td><span class="stock-number ${Number(product.stock)===0?'stock-zero':Number(product.stock)<=5?'stock-low':''}">${Number(product.stock)}</span></td>`}</tr>`).join('');
   const countPanel = activeCount ? `
     <section class="panel count-panel">
       <div class="section-title"><div><h3>Conteo semanal en curso</h3><small class="muted">Inicio: ${new Date(activeCount.fecha_inicio).toLocaleString('es-CU')}</small></div><span class="tag tag-warn">${activeCount.estado==='reconteo'?'RECONTEO':'EN CURSO'}</span></div>
       <p class="muted">Conteo ciego: no se muestra el stock esperado. Escanea el código, introduce la cantidad física y pulsa Registrar. Para un producto sin unidades, escribe 0 expresamente.</p>
       <div class="inventory-input-row"><label>Código escaneado<input id="count-code" placeholder="Escanea o escribe el código"></label><label>Cantidad contada<input id="count-qty" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></label><button class="btn primary" data-act="inventory-add-count">Registrar</button></div>
-      <div class="table-wrap"><table><thead><tr><th>Producto contado</th><th>Código</th><th>Cantidad registrada</th><th>Estado</th></tr></thead><tbody>${countDetails.map(row => `<tr><td>${esc(row.nombre)}</td><td class="code-text">${esc(row.codigo)}</td><td>${row.conteo_2!==null && row.conteo_2!==undefined ? Number(row.conteo_2) : Number(row.conteo_1)}</td><td>${row.resultado==='reconteo_pendiente'?'Pendiente de reconteo':row.resultado}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-cell">Aún no se han contado productos.</td></tr>'}</tbody></table></div>
-      <div class="count-finish-row"><span>${countDetails.length} de ${products.length} productos registrados · ${uncounted.length} pendientes de contar</span><button class="btn secondary" data-act="inventory-submit-count">${activeCount.estado==='reconteo'?'Finalizar reconteo':'Finalizar primer conteo'}</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Producto contado</th><th>Código</th>${hideRecountNumbers?'':'<th>Cantidad registrada</th>'}<th>Estado</th></tr></thead><tbody>${countTableRows || `<tr><td colspan="${hideRecountNumbers?3:4}" class="empty-cell">Aún no se han contado productos.</td></tr>`}</tbody></table></div>
+      <div class="count-finish-row"><span>${countProgress} · ${uncounted.length} pendientes de contar</span><button class="btn secondary" data-act="inventory-submit-count">${activeCount.estado==='reconteo'?'Finalizar reconteo':'Finalizar primer conteo'}</button></div>
       ${uncounted.length ? `<details class="uncounted-list"><summary>Productos sin escanear (${uncounted.length})</summary><p class="muted">Deben registrarse uno por uno. Para indicar que no hay existencias, introduce 0 explícitamente.</p>${uncounted.slice(0,120).map(product=>`<div class="uncounted-item">${esc(product.nombre)} <small>${esc(product.codigo)}</small></div>`).join('')}${uncounted.length>120?'<p class="muted">Lista limitada a 120; el conteo exige registrar todos.</p>':''}</details>` : ''}
     </section>` : `
     <section class="panel count-panel"><div class="section-title"><h3>Conteo semanal</h3><span class="tag tag-catalog">Sin conteo activo</span></div><p class="muted">El conteo no muestra al dependiente el stock esperado. Al terminar, las diferencias pasan por un único reconteo.</p><button class="btn primary" data-act="inventory-start-count" ${!state.turn && state.user.rol!=='administrador'?'disabled':''}>Iniciar conteo semanal</button>${!state.turn && state.user.rol!=='administrador'?'<p class="muted">Debes abrir un turno para comenzar.</p>':''}</section>`;
@@ -562,11 +572,8 @@ async function confirmMissingInventoryCounts() {
 
 async function evaluateFirstInventoryCount(countId) {
   const details=await query('SELECT * FROM conteo_detalle WHERE conteo_id=?',[countId]);
-  const mismatches=details.filter(row=>Number(row.conteo_1)!==Number(row.esperado_al_contar));
-  const matching=details.filter(row=>Number(row.conteo_1)===Number(row.esperado_al_contar));
-  const extraCount=Math.ceil(matching.length*0.2);
-  const extras=matching.slice().sort(()=>Math.random()-0.5).slice(0,extraCount);
-  const recountIds=new Set([...mismatches,...extras].map(row=>row.id));
+  const recount = selectInventoryRecountRows(details);
+  const recountIds=new Set(recount.selected.map(row=>row.id));
   await transaction(async()=>{
     for(const row of details){
       if(recountIds.has(row.id)) await run("UPDATE conteo_detalle SET resultado='reconteo_pendiente' WHERE id=?",[row.id]);
@@ -587,7 +594,8 @@ async function submitInventoryRecount() {
   if(rows.some(row=>row.conteo_2===null||row.conteo_2===undefined)) throw new Error('Debes recontear todos los productos indicados.');
   await transaction(async()=>{
     for(const row of rows){
-      if(Number(row.conteo_1)===Number(row.conteo_2)){
+      const result = recountResult(row.esperado_al_contar, row.conteo_1, row.conteo_2);
+      if(result==='coincide'){
         const delta=Number(row.conteo_2)-Number(row.esperado_al_contar);
         const current=await one('SELECT stock FROM productos WHERE codigo=?',[row.codigo]);
         if(Number(current?.stock||0)+delta<0){
@@ -603,7 +611,7 @@ async function submitInventoryRecount() {
         }
         await run("UPDATE conteo_detalle SET resultado='coincide',visible_para=NULL WHERE id=?",[row.id]);
       } else {
-        await run("UPDATE conteo_detalle SET resultado='pendiente_verificar',visible_para='administrador' WHERE id=?",[row.id]);
+        await run("UPDATE conteo_detalle SET resultado=?,visible_para='administrador' WHERE id=?",[result,row.id]);
       }
     }
     await run("UPDATE conteos SET estado='confirmado',fecha_fin=? WHERE id=?",[localDateTime(),count.id]);
@@ -616,7 +624,7 @@ async function reviewInventoryCount(detailId, decision) {
   if(state.user.rol!=='administrador') throw new Error('Solo el administrador puede revisar conteos.');
   const admin=await requestAdminPin('Resolver un pendiente de verificar del inventario');
   if(!admin) return;
-  const detail=await one("SELECT d.*,p.stock,p.nombre,c.usuario_id,c.turno_id FROM conteo_detalle d JOIN productos p ON p.codigo=d.codigo JOIN conteos c ON c.id=d.conteo_id WHERE d.id=? AND d.resultado='pendiente_verificar'",[detailId]);
+  const detail=await one("SELECT d.*,p.stock,p.nombre,c.usuario_id,c.turno_id FROM conteo_detalle d JOIN productos p ON p.codigo=d.codigo JOIN conteos c ON c.id=d.conteo_id WHERE d.id=? AND d.resultado IN ('pendiente_verificar','inconsistente')",[detailId]);
   if(!detail) throw new Error('El pendiente ya fue resuelto o no existe.');
   if(decision==='recontar'){
     const newCountId=id(); const start=localDateTime();

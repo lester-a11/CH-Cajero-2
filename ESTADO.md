@@ -1,49 +1,55 @@
-# CH Cajero — Estado de actualización V2
+# CH Cajero — Estado de revisión V2.0.1
 
-**Versión fuente:** 2.0.0  
-**Base de trabajo:** ZIP `CH_Cajero_Fase4(1).zip` (proyecto fuente 1.3.0) + especificación V2 fechada 24 nov 2026.  
+**Versión fuente:** 2.0.1  
+**Versión Android configurada:** `versionCode 5`, `versionName 2.0.1`  
+**Base:** proyecto fuente V2 recibido + especificación CH Cajero V2 (24 nov 2026).  
 **Arquitectura conservada:** Capacitor 8, interfaz web, SQLite local, integración Android/USB HID y funcionamiento offline.  
-**Estado:** actualización funcional parcial en código fuente; no es todavía una entrega APK validada para producción.
+**Estado:** correcciones de código aplicadas y pruebas locales parciales aprobadas; no es todavía una APK compilada, validada en dispositivo ni apta para producción.
 
-## Cambios V2 incorporados en el código
+## Correcciones aplicadas en 2.0.1
 
-- Pantalla de presentación con el logotipo CH transparente y el texto «Cajero», dos accesos de dependientes y acceso secundario a Administración.
-- Inicio de sesión con PIN, usuarios administrador + dos dependientes y control de turno único abierto.
-- Navegación inferior con Caja, Productos, Inventario e Historial; Administración visible solo en modo administrador.
-- Pagos con estado `activo`/`anulado`; eliminación lógica individual con auditoría y recálculo de saldo/vuelto.
-- Cancelación lógica de ventas abiertas o pausadas, sin descontar ni reponer stock; anulación administrativa separada para ventas cerradas.
-- Migración aditiva de SQLite para estados nuevos y conservación de filas anteriores.
-- Entradas de inventario con confirmación posterior del administrador, salidas administrativas con motivo, conteo ciego/reconteo y pendientes de verificación.
-- Cierre diario formato V3 con turnos, movimientos de inventario, conteos, arqueo, secuencia, hash anterior y SHA-256.
-- Importador de PC compatible con cierres V1, V2 y V3; control de cierres duplicados, integridad, secuencia y aplicación transaccional de inventario.
-- Versión de la aplicación fuente actualizada a 2.0.0; Android versionCode 4 / versionName 2.0.0.
+1. **Auditoría bloqueante:** la función de auditoría referenciaba `accion`, variable inexistente; ahora construye el evento con la propiedad persistida `accion: action`. Se conserva el formato contractual y se añadieron pruebas de serialización, validación y SHA-256 compatible con el importador Python.
+2. **Conteo ciego sin diferencias:** ya no se genera reconteo aleatorio si todos los productos coinciden con el stock esperado.
+3. **Conteo con diferencias:** se recontean todos los discrepantes y una muestra aleatoria del 20 % de los productos que inicialmente coincidían.
+4. **Clasificación de reconteo:** dos cantidades distintas entre sí quedan como `inconsistente`; dos cantidades iguales entre sí pero distintas del stock esperado quedan `pendiente_verificar`; solo el resultado que coincide con el esperado se confirma automáticamente.
+5. **Bandeja administrativa:** los resultados `inconsistente` y `pendiente_verificar` aparecen para revisión del administrador.
+6. **Verificador de catálogo:** el script de Fase 1 ahora valida el `catalogo.json` y su SHA-256 según el formato del ZIP de catálogo; antes intentaba cargar ese ejemplo mediante el importador de cierres.
+7. **Privacidad del reconteo:** la vista del dependiente ya no muestra las cantidades del primer o segundo conteo mientras recontea; solo muestra un estado neutro registrado/pendiente.
 
-## Verificaciones ejecutadas
+## Pruebas ejecutadas
 
-- `bash scripts/verify-phase4.sh`: completado correctamente.
-- JavaScript: **33/33** pruebas disponibles aprobadas. El script detecta que falta `fflate` y omite únicamente la prueba dependiente de esa librería.
-- Importador Python de la PC: **9/9** pruebas aprobadas, incluyendo V1/V2/V3, ventas canceladas, movimientos, duplicados y detección de alteraciones de hash/secuencia.
-- `node --check` sobre los módulos JavaScript: correcto.
-- `python3 -m py_compile pc/pc_tool.py`: correcto.
-- Se comprobó la migración de la restricción del estado de venta y la preservación de registros antiguos en una base SQLite de prueba.
+- `bash scripts/verify-phase1.sh`: ejecutado; valida pruebas Fases 1 y 2, pruebas Python, sintaxis JS/Python y catálogo demo.
+- `bash scripts/verify-phase3.sh`: ejecutado; valida pruebas de Fases 1–3, importador Python y sintaxis.
+- `bash scripts/verify-phase4.sh`: ejecutado; al faltar `fflate`, usa la ruta de pruebas disponibles y declara explícitamente que la suite integral no se ejecutó.
+- Pruebas unitarias nuevas: `tests/audit-event.test.js` y `tests/inventory-count.test.js`.
+- Se verificó un evento SHA-256 producido por el módulo JavaScript contra el verificador de cadena de auditoría de Python.
+- JavaScript disponible: **43/43** pruebas aprobadas (la suite omite solo `tests/integrity.test.js`, que importa `fflate`).
+- Python del importador PC: **9/9** pruebas aprobadas.
+- `verify-phase1.sh`, `verify-phase3.sh` y `verify-phase4.sh`: código de salida 0.
+- Catálogo demo: 3 productos, suma $6.00 USD y SHA-256 válido.
 
 ## Pendientes obligatorios antes de producción
 
-1. **Dinero como enteros:** la implementación actual todavía utiliza números decimales JavaScript/SQLite para importes. La especificación V2 exige almacenar todos los importes en centavos enteros y usar una sola regla de redondeo. Esta migración requiere diseñar y probar una conversión de datos históricos; no debe improvisarse.
-2. **Respaldos automáticos cifrados:** el proyecto conserva respaldo manual/restauración, pero falta el respaldo automático cifrado diario y antes de cada migración/actualización.
-3. **Compilación APK:** no se generó APK en este entorno. `npm install` agotó el tiempo al descargar dependencias; no se ejecutaron `npm run build` ni Gradle/Android SDK aquí.
-4. **Integridad completa:** la prueba `tests/integrity.test.js` depende de `fflate` y quedó sin ejecutar en este entorno. Debe ejecutarse `npm install && npm test` en GitHub Actions o en un equipo con red.
-5. **Pruebas físicas:** falta probar la migración real con una copia de la base de datos del teléfono, la Netum L3 por OTG, ausencia del teclado virtual, cámara, selector de archivos, compartir por WhatsApp y restauración en el Redmi 14C.
-6. **Alertas avanzadas de PC:** se generan alertas para entradas pendientes, conteos pendientes, diferencias de arqueo y discrepancias de stock. Falta completar toda la analítica avanzada especificada (repetición de faltantes, correcciones frecuentes, cancelaciones con dinero cobrado y correlación temporal de conteos/salidas).
-7. **Firma de actualización:** para instalar encima de la APK actual se necesita exactamente la misma keystore de publicación que firmó la instalación existente. No se incluye ni se crea una clave privada en este ZIP.
+1. **Dinero en enteros:** el esquema y los cálculos todavía usan valores decimales (`REAL`/`Number`) en importes. La especificación exige centavos enteros y una migración histórica probada. No se hizo una conversión parcial porque mezclar importes en unidades y centavos dañaría ventas existentes.
+2. **Respaldos automáticos cifrados:** sigue existiendo respaldo manual firmado con SHA-256, pero falta generar automáticamente un respaldo cifrado diario y otro antes de migraciones/actualizaciones. El SHA-256 detecta alteración; no cifra ni protege la confidencialidad.
+3. **Suite completa:** `tests/integrity.test.js` depende de `fflate`. En este entorno no se pudo instalar la dependencia por fallo de red al acceder al registro npm. La suite íntegra debe ejecutarse con `npm install && npm test`.
+4. **Compilación APK:** no se generó APK en este entorno. No hay Android SDK/Gradle disponibles y la descarga de dependencias npm falló. La carpeta contiene el proyecto fuente, no un binario nuevo instalable.
+5. **Hardware real:** falta probar en Redmi 14C la Netum L3 por OTG, captura HID sin teclado virtual, uso prolongado, cámara, selector de archivos, compartir por WhatsApp, restauración y migración desde una copia real de la base antigua.
+6. **Importador PC:** falta completar la totalidad de alertas avanzadas de la sección 17.7 de la especificación (faltantes repetidos, correcciones frecuentes, cancelaciones con cobros previos y correlaciones temporales).
+7. **Firma de actualización:** una actualización sobre la APK ya instalada exige la misma keystore de publicación. Este ZIP no contiene una clave privada ni puede reconstruir la firma de la APK original.
+8. **Pruebas de aceptación de punta a punta:** se deben ejecutar con APK compilada: pagos mixtos, eliminar pago, cancelar venta, anulación administrativa, entrada/salida, conteo y revisión, cierre V3, importación PC, duplicados y restauración.
+
+## APK original recibida
+
+La APK adjunta se inspeccionó como binario. Su bundle web no contiene los marcadores/funciones V2 revisados (usuarios dependientes dobles, cancelación lógica V2, estados de pago anulados y módulo de inventario/conteo); corresponde a la aplicación anterior, no al proyecto fuente V2. No es posible convertir un APK binario antiguo en el nuevo proyecto fuente con una edición segura del ZIP: se corrigió el proyecto fuente V2, que debe recompilarse.
 
 ## Instrucciones seguras
 
-- Conserva la APK actual y crea un respaldo completo desde ella antes de probar esta versión.
-- Sube el contenido de este proyecto a un repositorio privado GitHub y ejecuta **Actions → Compilar CH Cajero APK → Run workflow → debug** para pruebas iniciales.
-- No instales un APK `release` encima de la aplicación actual hasta confirmar que se usa la misma keystore. Configura los cuatro secretos de firma documentados en README.
-- No uses esta actualización como caja de producción hasta completar los requisitos obligatorios y todas las pruebas del dispositivo real.
+- Conserva la instalación de trabajo y crea un respaldo manual antes de probar una versión nueva.
+- Compila primero `debug` mediante el workflow `.github/workflows/android-apk.yml` en GitHub Actions o un equipo que tenga Node 22, JDK y Android SDK.
+- Instala y valida el APK debug en un entorno controlado; no registres ventas reales hasta cerrar los pendientes anteriores.
+- No instales `release` encima de la aplicación anterior hasta confirmar que se firma con la misma keystore.
 
 ## Resultado
 
-La actualización V2 está aplicada al código fuente en las áreas principales de ventas, pagos, usuarios/turnos, inventario, cierre V3 e importador PC. Se entrega como proyecto fuente para continuar la validación; **no se afirma que el APK esté compilado, firmado o completamente conforme a todos los requisitos obligatorios de V2**.
+Se corrigieron errores reproducibles en auditoría y conteo, y se añadieron pruebas de regresión. **No puede certificarse que funcione al 100 %**: siguen faltando requisitos obligatorios de integridad monetaria y respaldo, suite completa, compilación Android y validación en hardware. La entrega es un proyecto fuente 2.0.1 corregido para continuar esas pruebas, no un APK de producción.

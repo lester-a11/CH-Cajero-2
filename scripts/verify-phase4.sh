@@ -9,11 +9,13 @@ else
   echo "AVISO: fflate no está instalado; se ejecutan las pruebas JS independientes de esa dependencia."
   echo "Para completar la suite integral: npm install && npm test"
   node --test \
+    tests/audit-event.test.js \
     tests/backup-validation.test.js \
     tests/barcode-buffer.test.js \
     tests/cart.test.js \
     tests/catalog-import.test.js \
     tests/closure.test.js \
+    tests/inventory-count.test.js \
     tests/money.test.js \
     tests/sale-rules.test.js \
     tests/security.test.js

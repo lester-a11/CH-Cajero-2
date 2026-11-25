@@ -1,12 +1,12 @@
 # CH Cajero — aplicación Android offline
 
-**Versión del proyecto: 2.0.0 — actualización de código conforme a la especificación V2; validación final pendiente.**
+**Versión del proyecto: 2.0.1 — correcciones de auditoría y conteo; validación final pendiente.**
 
 Proyecto de cajero para CH Electronic / Componentes Habana, basado en **Especificación: CH Cajero – APK Android con pistola lectora, versión 2.0 (24 nov 2026)**. La aplicación móvil es un cajero: el catálogo maestro y el inventario global permanecen en la PC Ubuntu. El teléfono trabaja sin internet después de instalarse y recibe/envía archivos manualmente.
 
-## Versión 2.0.0 — actualización de especificación V2
+## Versión 2.0.1 — correcciones de revisión V2
 
-Esta entrega actualiza el código fuente a la especificación V2. Incluye estados de pago activo/anulado, eliminación lógica de pagos, cancelación de ventas abiertas o pausadas, separación entre cancelación y anulación administrativa de ventas cerradas, usuarios y turnos, pantalla de inicio CH, navegación inferior con Inventario, entradas/salidas/conteo semanal y exportación de cierre diario V3. El importador de la PC acepta cierres V1, V2 y V3, verifica la integridad y evita aplicar dos veces un mismo cierre.
+Esta entrega conserva las funciones V2 e incorpora correcciones encontradas en la revisión: auditoría encadenada sin referencia a variables inexistentes; verificación del hash de los eventos con la misma estructura contractual que el importador PC; y reconteo ciego ajustado para no solicitar muestras cuando no hay discrepancias, detectar lecturas inconsistentes y enviar a revisión los conteos que siguen fuera del stock esperado. También corrige el verificador del catálogo demo y añade pruebas de regresión.
 
 **Importante:** esta entrega es una actualización del código fuente, no un APK ya compilado ni certificado para operar en producción. Antes de usarla con ventas reales deben completarse los pendientes obligatorios descritos en `ESTADO.md`: importes almacenados como centavos enteros y respaldo automático cifrado, además de la compilación y pruebas físicas en el Redmi 14C con la Netum L3. No reemplaces la instalación actual hasta validar migración y firma.
 

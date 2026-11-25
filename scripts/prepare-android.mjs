@@ -20,8 +20,8 @@ for (const name of ['MainActivity.java', 'SQLiteBridgePlugin.java', 'ScannerBrid
 const appGradle = path.join(root, 'android', 'app', 'build.gradle');
 let gradle = await fs.readFile(appGradle, 'utf8');
 // Mantener la versión de Android sincronizada con el proyecto fuente.
-gradle = gradle.replace(/versionCode\s+\d+/, 'versionCode 4');
-gradle = gradle.replace(/versionName\s+['\"][^'\"]+['\"]/, 'versionName \"2.0.0\"');
+gradle = gradle.replace(/versionCode\s+\d+/, 'versionCode 5');
+gradle = gradle.replace(/versionName\s+['\"][^'\"]+['\"]/, 'versionName \"2.0.1\"');
 await fs.writeFile(appGradle, gradle);
 if (process.env.ANDROID_KEYSTORE_PATH && !gradle.includes('CH_CAJERO_RELEASE_SIGNING')) {
   gradle += `\n\n// CH_CAJERO_RELEASE_SIGNING\nandroid {\n    signingConfigs {\n        release {\n            storeFile file(System.getenv('ANDROID_KEYSTORE_PATH'))\n            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')\n            keyAlias System.getenv('ANDROID_KEY_ALIAS')\n            keyPassword System.getenv('ANDROID_KEY_PASSWORD')\n        }\n    }\n    buildTypes {\n        release { signingConfig signingConfigs.release }\n    }\n}\n`;

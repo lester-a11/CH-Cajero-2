@@ -25,11 +25,18 @@ echo
 echo '== Catálogo demo y SHA-256 =='
 python3 - <<'PY'
 import importlib.util
+import json
+import zipfile
 from pathlib import Path
 spec = importlib.util.spec_from_file_location('pc_tool', 'pc/pc_tool.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-payload, _ = module.load_archive(Path('examples/catalogo_prueba_fase1.zip'))
+archive_path = Path('examples/catalogo_prueba_fase1.zip')
+with zipfile.ZipFile(archive_path, 'r') as archive:
+    matches = [name for name in archive.namelist() if Path(name).name == 'catalogo.json']
+    if len(matches) != 1:
+        raise SystemExit('ERROR: el ZIP demo debe contener exactamente un catalogo.json')
+    payload = json.loads(archive.read(matches[0]).decode('utf-8'))
 if payload.get('tipo') != 'catalogo' or not module.verify_hash(payload):
     raise SystemExit('ERROR: catálogo inválido o hash incorrecto')
 products = payload.get('productos') or []

@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { buildAuditEvent } from './audit-event.js';
 
 const NativeSQLite = registerPlugin('SQLiteBridge');
 let initialized = false;
@@ -213,7 +214,8 @@ export async function audit(user, action, detail) {
   const detalle = typeof detail === 'string' ? detail : JSON.stringify(detail);
   const previous = await one('SELECT hash_evento FROM auditoria WHERE hash_evento IS NOT NULL ORDER BY rowid DESC LIMIT 1');
   const hash_anterior = previous?.hash_evento || null;
-  const hash_evento = await sha256Text(JSON.stringify({ fecha_hora, usuario_id, usuario, accion, detalle, turno_id, hash_anterior }));
+  const event = buildAuditEvent({ fecha_hora, usuario_id, usuario, action, detalle, turno_id, hash_anterior });
+  const hash_evento = await sha256Text(JSON.stringify(event));
   await run(
     `INSERT INTO auditoria(id,fecha_hora,usuario_id,usuario,accion,detalle,turno_id,hash_anterior,hash_evento)
      VALUES(?,?,?,?,?,?,?,?,?)`,
